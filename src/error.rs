@@ -37,6 +37,9 @@ pub enum ShieldedError {
     
     #[error("Wallet not found: {0}")]
     WalletNotFound(String),
+
+    #[error("Storage error: {0}")]
+    StorageError(String),
 }
 
 pub type Result<T> = std::result::Result<T, ShieldedError>;

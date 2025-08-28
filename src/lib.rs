@@ -5,6 +5,7 @@ pub mod commitment;
 pub mod zk_proof;
 pub mod merkle_tree;
 pub mod crypto;
+pub mod storage;
 
 pub use error::ShieldedError;
 pub use wallet::Wallet;
@@ -12,4 +13,4 @@ pub use shielded_transaction::ShieldedTransaction;
 pub use commitment::CommitmentScheme;
 pub use zk_proof::ZeroKnowledgeProof;
 pub use merkle_tree::MerkleTree;
-
+pub use storage::StorageData;
