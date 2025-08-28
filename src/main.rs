@@ -32,7 +32,7 @@ enum Commands {
         to: String,
         #[arg(short, long)]
         amount: u64,
-        #[arg(short, long, default_value = "false")]
+        #[arg(short, long)]
         shielded: bool,
     },
     /// Verify a transaction
