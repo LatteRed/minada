@@ -6,8 +6,9 @@ use namada_shielded_demo::{
     zk_proof::ZeroKnowledgeProof,
     wallet::Wallet,
     error::ShieldedError,
+    storage::StorageData,
 };
-use tracing::{info, error};
+use tracing::info;
 
 #[derive(Parser)]
 #[command(name = "namada-shielded-demo")]
@@ -57,14 +58,22 @@ enum Commands {
     },
     /// Show Merkle tree state
     ShowMerkleTree,
+    /// List all stored transactions
+    ListTransactions,
+    /// Clear all stored data
+    ClearStorage,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), ShieldedError> {
-    // Initialize logging
+    // Set up logging for the demo
     tracing_subscriber::fmt::init();
     
     info!("Starting Namada Shielded Transaction Demo");
+    
+    // Load existing data from storage
+    let mut storage = StorageData::load()?;
+    info!("Loaded {} transactions from storage", storage.get_all_transactions().len());
     
     let cli = Cli::parse();
     
@@ -82,14 +91,33 @@ async fn main() -> Result<(), ShieldedError> {
                 ShieldedTransaction::create_public(&from, &to, amount)?
             };
             
+            // Store the transaction persistently
+            storage.add_transaction(transaction.clone())?;
+            
             println!("Created transaction: {}", transaction.id);
             println!("Type: {}", if shielded { "Shielded" } else { "Public" });
             println!("Amount: {}", amount);
+            println!("Transaction saved to persistent storage!");
         }
         
         Commands::VerifyTransaction { transaction_id } => {
-            let is_valid = ShieldedTransaction::verify(&transaction_id)?;
-            println!("Transaction {} is {}", transaction_id, if is_valid { "valid" } else { "invalid" });
+            // Check if transaction exists in persistent storage
+            if let Some(transaction) = storage.get_transaction(&transaction_id) {
+                println!("Transaction {} found in persistent storage", transaction_id);
+                println!("From: {} -> To: {}", transaction.from, transaction.to);
+                println!("Amount: {}, Type: {:?}", transaction.amount, transaction.transaction_type);
+                println!("Status: {:?}", transaction.status);
+                println!("Timestamp: {}", transaction.timestamp);
+                
+                // Also verify the transaction format
+                let is_valid = ShieldedTransaction::verify(&transaction_id)?;
+                println!("Transaction format is {}", if is_valid { "valid" } else { "invalid" });
+            } else {
+                println!("Transaction {} not found in persistent storage", transaction_id);
+                println!("Checking transaction format only...");
+                let is_valid = ShieldedTransaction::verify(&transaction_id)?;
+                println!("Transaction format is {}", if is_valid { "valid" } else { "invalid" });
+            }
         }
         
         Commands::GenerateProof { transaction_id } => {
@@ -99,7 +127,7 @@ async fn main() -> Result<(), ShieldedError> {
         }
         
         Commands::Balance { wallet } => {
-            // In a real implementation, this would query the blockchain
+            // TODO: In production, this would actually query the blockchain state
             println!("Balance for wallet {}: 1000 NAM (estimated)", wallet);
         }
         
@@ -115,12 +143,53 @@ async fn main() -> Result<(), ShieldedError> {
         }
         
         Commands::ShowMerkleTree => {
-            let tree = MerkleTree::new();
+            // Rebuild Merkle tree from stored leaves
+            let tree = storage.rebuild_merkle_tree();
+            let transactions = storage.get_all_transactions();
+            
+            println!("=== Merkle Tree State ===");
             println!("Merkle Tree Root: {}", tree.root());
             println!("Tree Height: {}", tree.height());
             println!("Number of leaves: {}", tree.leaf_count());
+            println!("Total transactions stored: {}", transactions.len());
+            
+            if !transactions.is_empty() {
+                println!("\n=== Stored Transactions ===");
+                for (id, transaction) in transactions.iter() {
+                    println!("ID: {}", id);
+                    println!("  From: {} -> To: {}", transaction.from, transaction.to);
+                    println!("  Amount: {}, Type: {:?}", transaction.amount, transaction.transaction_type);
+                    println!("  Status: {:?}", transaction.status);
+                    println!();
+                }
+            }
+        }
+        
+        Commands::ListTransactions => {
+            let transactions = storage.get_all_transactions();
+            
+            if transactions.is_empty() {
+                println!("No transactions stored yet.");
+            } else {
+                println!("=== All Stored Transactions ===");
+                for (i, (id, transaction)) in transactions.iter().enumerate() {
+                    println!("{}. Transaction ID: {}", i + 1, id);
+                    println!("   From: {} -> To: {}", transaction.from, transaction.to);
+                    println!("   Amount: {}, Type: {:?}", transaction.amount, transaction.transaction_type);
+                    println!("   Status: {:?}", transaction.status);
+                    println!("   Timestamp: {}", transaction.timestamp);
+                    println!();
+                }
+            }
+        }
+        
+        Commands::ClearStorage => {
+            storage.clear()?;
+            println!("All stored data has been cleared.");
+            println!("Storage files have been reset.");
         }
     }
     
     Ok(())
 }
+
